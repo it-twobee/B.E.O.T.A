@@ -1,144 +1,177 @@
-# TWO BEE Gestionale
+# B.E.O.T.A.
+### Business Engine & Operations Tool for Agencies
 
-Piattaforma operativa interna per TWO BEE S.R.L. — sostituisce ClickUp + Slack.
-
-**Stack:** Next.js 14 · Supabase · Tailwind CSS · shadcn/ui · Recharts · Vercel
+> Piattaforma operativa interna per **TWO BEE S.R.L.** — progettata per sostituire l'intero stack ClickUp + Slack + fogli Excel con un unico gestionale su misura per agenzie di digital marketing e growth.
 
 ---
 
-## Setup Rapido
+## Cosa è
 
-### 1. Prerequisiti
+B.E.O.T.A. è un gestionale full-stack costruito attorno ai processi reali di un'agenzia. Non è un template: ogni funzionalità nasce da un problema operativo specifico.
 
-- Node.js 18+
-- Account Supabase (supabase.com)
-- Account Vercel (vercel.com)
+```
+Clienti → Progetti → Sprint → Milestone → Task → Subtask
+    ↓           ↓          ↓
+  KPI        Chat       Aggiornamenti
+    ↓           ↓
+Fatture    Portale Cliente
+```
 
-### 2. Configura Supabase
+---
 
-1. Crea un nuovo progetto su [supabase.com](https://supabase.com)
-2. Vai in **Settings → API** e copia:
-   - `Project URL`
-   - `anon public` key
-   - `service_role` key
+## Stack
 
-3. Esegui le migration nel **SQL Editor** di Supabase:
-   - Copia e incolla il contenuto di `supabase/migrations/001_initial_schema.sql`
-   - Esegui
+| Layer | Tecnologia |
+|-------|-----------|
+| Frontend | Next.js 14 App Router · TypeScript strict · Tailwind CSS |
+| Backend | Supabase (PostgreSQL + Auth + RLS + Realtime) |
+| AI | Groq `llama-3.3-70b-versatile` |
+| Charts | Recharts · SVG inline |
+| UI | Radix UI · Lucide · Sonner toast |
+| Deploy | Vercel |
 
-4. Crea il bucket Storage:
-   - Vai in **Storage → New Bucket**
-   - Nome: `documents`
-   - Public: NO
+---
 
-### 3. Variabili d'ambiente
+## Funzionalità
+
+### Dashboard
+Grid drag & resize con widget configurabili (solo super admin). Snapshot aziendale in tempo reale: MRR, risk score clienti, task in scadenza, pipeline commerciale, obiettivi strategici, AI executive brief.
+
+### Clienti
+Scheda cliente completa con 7 tab: Panoramica · KPI · Fatturazione · Documenti · Anagrafica · Relazione · Chat. Health score automatico, alert intelligenti, aggiornamento Realtime su ogni modifica.
+
+### Progetti
+Struttura gerarchica **Sprint → Milestone → Task → Subtask** con inline edit, assegnazioni, ore stimate/lavorate, date di scadenza, chat per progetto con canali team e customer care separati.
+
+### Reparti (Growth · Marketing · Digital · AI)
+Board operativa per reparto con 4 sotto-tab:
+
+| Tab | Contenuto |
+|-----|-----------|
+| **Dashboard** | Scorecard, velocity chart, client health, AI chat con storico persistente |
+| **Board Team** | Sprint attivi aggregati, tag system cross-progetto, filtri per assignee/tag/progetto, bulk tag |
+| **Task Clienti** | Deliverable del cliente, template automatici per tipo progetto, ottimizzazione AI con chat |
+| **Timeline** | Barre sprint, marker milestone, stelle task cliente; filtri periodo/progetto/tag |
+
+### Portale Cliente *(preview super admin)*
+Vista fedele di quello che vede il cliente:
+- Task da completare (checkabili direttamente)
+- Aggiornamenti dei progetti con tag e risposte
+- Chat customer care in tempo reale
+- KPI mensili e fatture
+
+### AI integrata
+- Dashboard chat contestuale sui dati aziendali
+- Executive brief narrativo quotidiano
+- Generazione sprint e milestone da obiettivi
+- Analisi KPI mensile e report automatici
+- Template task cliente generati e ottimizzati per tipo progetto
+- AI Advisor per reparto con azioni dirette (crea task, salva nota, esporta PDF)
+
+### Sistema di Tag
+14 tag predefiniti con colori (`#growth #marketing #digital #ai #tracking #automation #urgente #bloccante #quick-win #design #copy #dev #strategia #analytics`) + tag custom liberi. Filtri rapidi cross-progetto, pillole inline sulle task, bulk tag su selezione multipla.
+
+### Altro
+Fatturazione · Commerciale & pipeline lead · HR & timesheet · Strategia & OKR · Customer care & ticket · Calendario · Documenti · Cronologia
+
+---
+
+## Struttura
+
+```
+app/
+├── (auth)/                     # Login, reset password
+├── (dashboard)/
+│   ├── dashboard/              # Dashboard principale
+│   ├── clienti/[id]/           # Scheda cliente
+│   │   └── progetto/[pid]/     # Pagina progetto
+│   ├── reparti/[dept]/         # Board reparto (growth/marketing/digital/ai)
+│   ├── portale-cliente/[id]/   # Preview portale cliente (super admin)
+│   ├── commerciale/            # Pipeline e lead
+│   ├── fatturazione/           # Fatture aggregate
+│   ├── hr/                     # Team e timesheet
+│   └── strategia/              # OKR e obiettivi
+└── api/                        # Route handlers AI + integrazioni
+
+components/
+├── dashboard/                  # Widget dashboard
+├── clients/tabs/               # Tab scheda cliente
+├── projects/                   # ProjectPageClient, SprintMilestoneBoardSection
+├── reparti/                    # BoardTeam, TaskClienteSection, RepartiTimeline
+├── portale-cliente/            # ClientPortalView
+├── chat/                       # SlackChat
+└── shared/                     # Sidebar, Header
+
+lib/
+├── supabase/                   # client · server · admin
+├── types/database.ts           # Tutti i tipi TypeScript
+├── permissions.ts              # isSuperAdmin, RLS helpers
+└── reparti-constants.ts        # Tag system, template task cliente
+
+supabase/migrations/            # 58 migration (001 → 058)
+```
+
+---
+
+## Setup
+
+### 1. Variabili d'ambiente
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-Modifica `.env.local` con le tue credenziali:
-
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+GROQ_API_KEY=gsk_...
 ```
 
-### 4. Installa dipendenze e avvia
+### 2. Esegui le migration
+
+Su Supabase Dashboard → SQL Editor, esegui in ordine i file `supabase/migrations/001_*.sql` → `058_*.sql`.
+
+### 3. Installa e avvia
 
 ```bash
 npm install
-npm run dev
-```
-
-Apri [http://localhost:3000](http://localhost:3000)
-
-### 5. Seed data (clienti reali TWO BEE)
-
-Nel **SQL Editor** di Supabase, esegui il contenuto di `supabase/seed.sql`.
-
----
-
-## Creare il Primo Utente Admin
-
-1. Vai su Supabase → **Authentication → Users → Invite User**
-2. Inserisci email: `marco.lucci@twobee.it`
-3. L'utente riceve email con link di setup
-4. Vai nel **SQL Editor** ed esegui:
-
-```sql
-UPDATE public.profiles
-SET role = 'admin', full_name = 'Marco Lucci'
-WHERE email = 'marco.lucci@twobee.it';
-```
-
-Ripeti per tutti i membri del team (vedi seed.sql per la lista).
-
----
-
-## Deploy su Vercel
-
-```bash
-# Installa Vercel CLI
-npm i -g vercel
-
-# Deploy
-vercel
-```
-
-Oppure collega il repo GitHub su [vercel.com](https://vercel.com) e imposta le env vars nel pannello Vercel:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-
----
-
-## Struttura del Progetto
-
-```
-app/
-├── (auth)/login/        — Pagina login
-├── (dashboard)/
-│   ├── dashboard/       — Dashboard KPI
-│   ├── clienti/         — Lista + pagina cliente
-│   ├── task/            — Kanban board
-│   ├── chat/            — Messaggistica realtime
-│   ├── report/          — Report KPI aggregati
-│   ├── documenti/       — File manager
-│   └── impostazioni/    — Team + profilo
-components/
-├── shared/              — Sidebar, Header
-├── dashboard/           — Componenti dashboard
-├── clients/             — Lista clienti, form, tabs
-supabase/
-├── migrations/          — Schema SQL + RLS
-└── seed.sql             — Dati iniziali clienti TWO BEE
+npm run dev        # localhost:3000
+npm run build
+npm run lint
 ```
 
 ---
 
-## Ruoli e Accessi
+## Ruoli
 
 | Ruolo | Accesso |
 |-------|---------|
-| `admin` | Tutto — Marco, Walter |
-| `team` | Solo clienti assegnati — Toto, Sabrina, Michele, Alessia, Gabriele |
-| `client` | Solo la propria pagina cliente |
-| `guest` | Sola lettura sul cliente specifico |
+| `super_admin` | Tutto + customize dashboard + portale cliente preview |
+| `admin` | Gestione completa clienti, progetti, team |
+| `team` | Operativo su progetti assegnati |
+| `client` | Solo portale cliente |
+| `guest` | Read-only su aree specifiche |
 
 ---
 
-## Variabili d'Ambiente Richieste
+## Migration pendenti
 
-| Variabile | Descrizione |
-|-----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | URL del progetto Supabase |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chiave pubblica (anon) Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Chiave service role (solo server) |
-| `NEXT_PUBLIC_APP_URL` | URL dell'app (es. https://gestionale.twobee.it) |
+Dopo il primo deploy, eseguire su Supabase SQL Editor:
+
+```sql
+-- 057: AI chat reparti
+CREATE TABLE IF NOT EXISTS public.dept_ai_chats ( ... );
+
+-- 058: Tag e task cliente
+ALTER TABLE public.tasks
+  ADD COLUMN IF NOT EXISTS is_client_task BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+```
+
+Vedi i file completi in `supabase/migrations/`.
 
 ---
 
-*TWO BEE S.R.L. — Napoli — Uso interno riservato*
+*TWO BEE S.R.L. · Napoli · Uso interno riservato*
