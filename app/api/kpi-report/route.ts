@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 import type { Client, ClientKpi } from '@/lib/types/database'
 
 async function groq(prompt: string): Promise<string> {
@@ -239,9 +240,129 @@ Rispondi ESCLUSIVAMENTE con JSON valido, senza markdown, senza testo prima o dop
   }
 }
 
+/* ── SEZIONE DI SERVIZIO ── */
+interface SvcProject { id: string; name: string; project_type: string | null; project_kind: string | null; status: string; created_at: string }
+interface SvcMember { full_name: string; job_title: string | null }
+
+const CLIENT_TYPE_LABEL: Record<string, string> = {
+  growth: 'Growth', digital: 'Digital Studio', growth_digital: 'Growth + Digital',
+}
+
+function buildServiceSection(
+  client: Client, projects: SvcProject[], team: SvcMember[],
+  accent: string, accentDim: string, accentBorder: string,
+): string {
+  const fmtD = (s: string | null) => s ? new Date(s).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+  const activeProjects = projects.filter(p => p.status === 'attivo')
+  const infoCard = (lbl: string, val: string) =>
+    `<div class="kpi-card"><div class="kpi-lbl">${lbl}</div><div class="kpi-val" style="font-size:18px">${val}</div></div>`
+
+  const projectRows = projects.length === 0
+    ? '<p style="color:#333;font-size:13px;padding:8px 0">Nessun progetto registrato.</p>'
+    : projects.map(p => {
+        const kind = p.project_kind === 'growth' ? 'G' : p.project_kind === 'digital' ? 'D' : '—'
+        const kindColor = p.project_kind === 'growth' ? '#22C55E' : p.project_kind === 'digital' ? '#3B82F6' : '#555'
+        const statusColor = p.status === 'attivo' ? '#22C55E' : p.status === 'completato' ? '#888' : '#F59E0B'
+        return `<tr>
+          <td style="padding:9px 14px;font-size:12px;color:#D0D0D0;font-weight:500">${p.name}</td>
+          <td style="padding:9px 12px"><span style="font-size:9px;font-weight:800;color:${kindColor};border:1px solid ${kindColor}55;border-radius:5px;padding:2px 7px">${kind}</span></td>
+          <td style="padding:9px 12px;font-size:11px;color:#888;text-transform:capitalize">${(p.project_type ?? '—').replace(/_/g, ' ')}</td>
+          <td style="padding:9px 14px;text-align:right"><span style="font-size:10px;font-weight:700;color:${statusColor};text-transform:capitalize">${p.status}</span></td>
+        </tr>`
+      }).join('')
+
+  const teamHtml = team.length === 0
+    ? '<span style="color:#333;font-size:12px">Nessun membro assegnato</span>'
+    : team.map(m => `<div style="display:flex;align-items:center;gap:9px;background:#0F0F0F;border:1px solid #1A1A1A;border-radius:10px;padding:9px 14px">
+        <div style="width:30px;height:30px;border-radius:50%;background:${accentDim};border:1px solid ${accentBorder};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${accent}">${m.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</div>
+        <div><div style="font-size:12px;color:#fff;font-weight:600">${m.full_name}</div><div style="font-size:10px;color:#555">${m.job_title ?? 'Team'}</div></div>
+      </div>`).join('')
+
+  return `
+<div class="page page-break">
+  <div class="page-head">
+    <div>
+      <div class="ph-section">Il servizio</div>
+      <div class="ph-title">Cosa gestiamo per te</div>
+      <div class="ph-sub">Pacchetto, progetti attivi e team dedicato</div>
+    </div>
+    <div class="ph-logo"><span>TWO</span> BEE</div>
+  </div>
+
+  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+    ${infoCard('Pacchetto', client.package ?? '—')}
+    ${infoCard('Tipo servizio', CLIENT_TYPE_LABEL[client.client_type] ?? client.client_type)}
+    ${infoCard('MRR', '€' + (client.mrr ?? 0).toLocaleString('it-IT'))}
+    ${infoCard('Progetti attivi', String(activeProjects.length))}
+  </div>
+
+  <div class="abox" style="margin-bottom:20px">
+    <div class="asec">Contratto</div>
+    <div style="display:flex;gap:40px">
+      <div><div style="font-size:10px;color:#555;margin-bottom:3px">Inizio</div><div style="font-size:14px;color:#D0D0D0;font-weight:600">${fmtD(client.contract_start)}</div></div>
+      <div><div style="font-size:10px;color:#555;margin-bottom:3px">Scadenza</div><div style="font-size:14px;color:#D0D0D0;font-weight:600">${fmtD(client.contract_end)}</div></div>
+      ${client.industry ? `<div><div style="font-size:10px;color:#555;margin-bottom:3px">Settore</div><div style="font-size:14px;color:#D0D0D0;font-weight:600">${client.industry}${client.market_area ? ` · ${client.market_area}` : ''}</div></div>` : ''}
+    </div>
+  </div>
+
+  <div class="divider">Progetti</div>
+  <div class="comp-wrap" style="margin-bottom:24px">
+    <table class="comp-table"><tbody>${projectRows}</tbody></table>
+  </div>
+
+  <div class="divider">Team dedicato</div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px">${teamHtml}</div>
+</div>`
+}
+
+/* ── TIMELINE OPERATIVA ── */
+interface TimelineEvent { date: string; type: string; label: string; detail?: string }
+
+function buildTimelineSection(events: TimelineEvent[], accent: string): string {
+  if (events.length === 0) return ''
+  const TYPE_COLOR: Record<string, string> = {
+    progetto: '#3B82F6', sprint: accent, milestone: '#22C55E', riunione: '#A855F7',
+  }
+  const TYPE_LABEL: Record<string, string> = {
+    progetto: 'Progetto', sprint: 'Sprint', milestone: 'Milestone', riunione: 'Riunione',
+  }
+  const fmtD = (s: string) => new Date(s).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })
+
+  const rows = events.map(e => {
+    const c = TYPE_COLOR[e.type] ?? '#888'
+    return `<div style="display:flex;gap:16px;padding:0 0 18px 0;position:relative">
+      <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+        <div style="width:11px;height:11px;border-radius:50%;background:${c};border:2px solid #080808;box-shadow:0 0 0 1px ${c}55;z-index:1"></div>
+        <div style="flex:1;width:2px;background:#1A1A1A;margin-top:2px"></div>
+      </div>
+      <div style="flex:1;padding-bottom:4px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+          <span style="font-size:9px;font-weight:800;color:${c};text-transform:uppercase;letter-spacing:.06em">${TYPE_LABEL[e.type] ?? e.type}</span>
+          <span style="font-size:10px;color:#444">${fmtD(e.date)}</span>
+        </div>
+        <div style="font-size:13px;color:#D8D8D8;font-weight:500">${e.label}</div>
+        ${e.detail ? `<div style="font-size:11px;color:#666;margin-top:2px">${e.detail}</div>` : ''}
+      </div>
+    </div>`
+  }).join('')
+
+  return `
+<div class="page page-break">
+  <div class="page-head">
+    <div>
+      <div class="ph-section">Timeline operativa</div>
+      <div class="ph-title">Cosa abbiamo fatto</div>
+      <div class="ph-sub">Cronologia di progetti, sprint, milestone e riunioni</div>
+    </div>
+    <div class="ph-logo"><span>TWO</span> BEE</div>
+  </div>
+  <div class="abox">${rows}</div>
+</div>`
+}
+
 export async function POST(req: NextRequest) {
   const {client,kpis,stdDefs,enabledKeys}:ReportBody = await req.json()
-  const {from,to,isGrowth:isGrowthParam}=Object.fromEntries(req.nextUrl.searchParams)
+  const {clientId,from,to,isGrowth:isGrowthParam}=Object.fromEntries(req.nextUrl.searchParams)
   const isGrowth=isGrowthParam==='1'
   const accent=isGrowth?'#F5C800':'#60A5FA'
   const accentDim=isGrowth?'rgba(245,200,0,0.07)':'rgba(96,165,250,0.07)'
@@ -256,6 +377,59 @@ export async function POST(req: NextRequest) {
   const prevMonth=sorted[sorted.length-2]??null
 
   const analysis=await generateAnalysis(client,kpis,stdDefs,enabledKeys,from??'',to??'')
+
+  /* ── Servizio + Timeline operativa (fetch RLS-enforced) ── */
+  let serviceHtml = ''
+  let timelineHtml = ''
+  if (clientId) {
+    try {
+      const sb = await createClient()
+      const { data: projects } = await sb.from('projects')
+        .select('id, name, project_type, project_kind, status, created_at')
+        .eq('client_id', clientId).order('created_at', { ascending: false })
+      const projectIds = (projects ?? []).map((p: { id: string }) => p.id)
+
+      const [assignmentsRes, sprintsRes, milestonesRes, meetingsRes] = await Promise.all([
+        sb.from('client_assignments').select('profiles(full_name, job_title)').eq('client_id', clientId),
+        projectIds.length ? sb.from('sprints').select('name, status, start_date, end_date, project_id').in('project_id', projectIds) : Promise.resolve({ data: [] }),
+        projectIds.length ? sb.from('tasks').select('title, due_date, status, project_id').in('project_id', projectIds).eq('is_milestone', true) : Promise.resolve({ data: [] }),
+        sb.from('meeting_notes').select('title, date').eq('client_id', clientId),
+      ])
+
+      const team = (assignmentsRes.data ?? [])
+        .map((a: { profiles: unknown }) => a.profiles)
+        .filter(Boolean) as SvcMember[]
+
+      serviceHtml = buildServiceSection(client, (projects ?? []) as SvcProject[], team, accent, accentDim, accentBorder)
+
+      // Costruisci gli eventi della timeline
+      const projName = (id: string) => (projects ?? []).find((p: { id: string }) => p.id === id)?.name ?? ''
+      const events: TimelineEvent[] = []
+      for (const p of (projects ?? []) as SvcProject[])
+        events.push({ date: p.created_at, type: 'progetto', label: `Avvio progetto: ${p.name}` })
+      for (const s of (sprintsRes.data ?? []) as { name: string; status: string; start_date: string; end_date: string; project_id: string }[]) {
+        if (s.start_date) events.push({ date: s.start_date, type: 'sprint', label: `Sprint "${s.name}" avviato`, detail: projName(s.project_id) })
+        if (s.status === 'completato' && s.end_date) events.push({ date: s.end_date, type: 'sprint', label: `Sprint "${s.name}" completato`, detail: projName(s.project_id) })
+      }
+      for (const m of (milestonesRes.data ?? []) as { title: string; due_date: string | null; status: string; project_id: string }[])
+        if (m.status === 'completato' && m.due_date) events.push({ date: m.due_date, type: 'milestone', label: m.title, detail: projName(m.project_id) })
+      for (const mt of (meetingsRes.data ?? []) as { title: string; date: string }[])
+        if (mt.date) events.push({ date: mt.date, type: 'riunione', label: mt.title })
+
+      // Filtra per periodo (se selezionato) e ordina cronologicamente
+      const inPeriod = (d: string) => {
+        const ym = d.slice(0, 7)
+        return (!from || ym >= from) && (!to || ym <= to)
+      }
+      const sortedEvents = events
+        .filter(e => e.date && (from || to ? inPeriod(e.date) : true))
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 30)
+      timelineHtml = buildTimelineSection(sortedEvents, accent)
+    } catch (e) {
+      console.error('[kpi-report] servizio/timeline fetch error:', e)
+    }
+  }
 
   /* ── build charts data ── */
   const chartLabels=sorted.map(k=>fmtShort(k.month.slice(0,7)))
@@ -486,7 +660,9 @@ table.main td:first-child{text-align:left}
   </div>
 </div>
 
-<!-- ════ PAG 2: SINTESI ════ -->
+${serviceHtml}
+
+<!-- ════ SINTESI ════ -->
 <div class="page page-break">
   <div class="page-head">
     <div>
@@ -585,7 +761,9 @@ ${sorted.length>0?`
   </div>
 </div>`:''}
 
-<!-- ════ PAG 6: RACCOMANDAZIONI ════ -->
+${timelineHtml}
+
+<!-- ════ RACCOMANDAZIONI ════ -->
 ${recHtml?`
 <div class="page page-break">
   <div class="page-head">
